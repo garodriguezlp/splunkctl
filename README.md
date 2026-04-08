@@ -79,7 +79,7 @@ The default `samples/` directory is mounted automatically. Refresh it with fresh
 |---|---|
 | `start` | Pull image, wire log directory, start container in detached mode |
 | `stop` | Stop and remove containers (volumes preserved) |
-| `reset` | Full teardown including volumes — fresh slate |
+| `destroy` | Tear down containers and remove all volumes |
 | `status` | Show current container state |
 
 ```bash
@@ -88,7 +88,7 @@ The default `samples/` directory is mounted automatically. Refresh it with fresh
 ./jbang splunkctl start --log-path /path/to/logs
 ./jbang splunkctl status
 ./jbang splunkctl stop
-./jbang splunkctl reset
+./jbang splunkctl destroy
 ```
 
 ### Configuration
@@ -280,7 +280,7 @@ When you are done, stop Splunk cleanly:
 
 ```bash
 ./jbang splunkctl stop   # keeps data volume for next time
-./jbang splunkctl reset  # wipes everything for a fresh start
+./jbang splunkctl destroy  # wipes everything for a fresh start
 ```
 
 ## License
