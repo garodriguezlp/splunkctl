@@ -1,7 +1,7 @@
 # Copilot Instructions for splunkctl
 
 `splunkctl` is a single-file JBang CLI (`SplunkCtl.java`, Java 17) that wraps `docker-compose`
-to manage a local Splunk container. Subcommands: `start`, `stop`, `reset`, `status`.
+to manage a local Splunk container. Subcommands: `start`, `stop`, `destroy`, `status`.
 
 ## Navigating the code
 
@@ -9,13 +9,13 @@ All logic lives in `SplunkCtl.java`. Classes are ordered top-down: CLI commands 
 infrastructure last. Section dividers (`// --- Commands ---`, `// --- Infrastructure ---`)
 are the map.
 
-- CLI layer: `SplunkCtl` (root), `StartCommand`, `StopCommand`, `ResetCommand`, `StatusCommand`
+- CLI layer: `SplunkCtl` (root), `StartCommand`, `StopCommand`, `DestroyCommand`, `StatusCommand`
 - Config boundary: `SplunkConfig` record
 - Infrastructure: `PreconditionChecker`, `DockerComposeRunner`
 
 `DockerComposeRunner` owns all process invocations — commands never spawn processes directly.
-`docker-compose.yml` and `docker/splunk/default.yml` are internal implementation details; their
-paths are constants, not CLI options.
+`support/compose-working-dir/docker-compose.yml` and `support/compose-working-dir/default.yml`
+are internal implementation details; their runtime extraction paths are constants, not CLI options.
 
 ## Code style
 

@@ -66,7 +66,7 @@ cd splunkctl
 
 Splunk will be available at **http://localhost:8000** — log in as `admin` / `changeme123`.
 
-The default `samples/` directory is mounted automatically. Refresh it with fresh timestamps before starting Splunk:
+The default `~/.splunkctl/samples` directory is mounted automatically. Refresh it with fresh timestamps before starting Splunk:
 
 ```bash
 ./jbang splunk-samples
@@ -83,8 +83,8 @@ The default `samples/` directory is mounted automatically. Refresh it with fresh
 | `status` | Show current container state |
 
 ```bash
-./jbang splunk-samples                      # refresh ./samples with current timestamps
-./jbang splunkctl start                        # defaults: ./samples as log dir
+./jbang splunk-samples                         # refresh ~/.splunkctl/samples with current timestamps
+./jbang splunkctl start                        # defaults: ~/.splunkctl/samples as log dir
 ./jbang splunkctl start --log-path /path/to/logs
 ./jbang splunkctl status
 ./jbang splunkctl stop
@@ -97,7 +97,7 @@ Defaults can be overridden with flags, environment variables, or a `~/.splunkctl
 
 | Option | Flag | Env var | Default |
 |---|---|---|---|
-| Log directory | `--log-path` | `SPLUNK_LOG_PATH` | `./samples` |
+| Log directory | `--log-path` | `SPLUNK_LOG_PATH` | `~/.splunkctl/samples` |
 | Splunk image | `--splunk-image` | `SPLUNK_IMAGE` | `splunk/splunk:10.0.0` |
 | Admin password | `--splunk-password` | `SPLUNK_PASSWORD` | `changeme123` |
 
@@ -110,7 +110,10 @@ log-path=/Users/me/app-logs
 
 ### Compose working directory
 
-`splunkctl` extracts its bundled `docker-compose.yml` and Splunk defaults into `~/.splunkctl` and runs `docker-compose` from there.
+`splunkctl` extracts its bundled `docker-compose.yml` and Splunk defaults into `~/.splunkctl/compose-working-dir` and runs `docker-compose` from there.
+
+- Runtime-managed sample logs default to `~/.splunkctl/samples`.
+- Existing legacy files from the old `~/.splunkctl` layout are migrated into `~/.splunkctl/compose-working-dir` automatically.
 
 - `start` reuses that working directory and prompts before overwriting an existing complete set of files.
 - `stop`, `destroy`, and `status` reuse the existing working directory and restore the bundled files automatically if they are missing or incomplete.
@@ -118,7 +121,7 @@ log-path=/Users/me/app-logs
 
 ## Splunk jump start
 
-Use `./jbang splunk-samples` to regenerate the demo files in `samples/` with timestamps anchored to the current time. That keeps them visible in Splunk's default UI window and makes API examples work with rolling searches like `earliest_time=-15m`.
+Use `./jbang splunk-samples` to regenerate the demo files in `~/.splunkctl/samples` with timestamps anchored to the current time. That keeps them visible in Splunk's default UI window and makes API examples work with rolling searches like `earliest_time=-15m`.
 
 The generator writes two files covering both supported formats:
 

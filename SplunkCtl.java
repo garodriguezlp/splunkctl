@@ -8,8 +8,8 @@
 //DEPS info.picocli:picocli:4.7.6
 //DEPS org.apache.commons:commons-exec:1.3
 
-//FILES docker-compose.yml
-//FILES docker/splunk/default.yml=docker/splunk/default.yml
+//FILES docker-compose.yml=support/compose-working-dir/docker-compose.yml
+//FILES default.yml=support/compose-working-dir/default.yml
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -17,6 +17,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.stream.Stream;
 import java.util.HashMap;
 import java.util.Scanner;
 import java.util.Map;
@@ -62,15 +63,31 @@ public class SplunkCtl implements Callable<Integer> {
   }
 
   SplunkConfig config(Path logPath) {
-    return new SplunkConfig(logPath, splunkImage, splunkPassword);
+    return new SplunkConfig(resolveLogPath(logPath), splunkImage, splunkPassword);
+  }
+
+  private Path resolveLogPath(Path logPath) {
+    if (logPath != null) {
+      return logPath;
+    }
+    String envLogPath = System.getenv("SPLUNK_LOG_PATH");
+    if (envLogPath != null && !envLogPath.isBlank()) {
+      return Path.of(envLogPath);
+    }
+    return InfrastructureExtractor.DEFAULT_SAMPLE_DIR;
   }
 
   /**
-   * Ensures ~/.splunkctl contains the bundled Compose working directory files and returns
-   * the path to docker-compose.yml.
+   * Ensures ~/.splunkctl/compose-working-dir contains the bundled Compose working directory files
+   * and returns the path to docker-compose.yml.
    */
   Path prepareComposeWorkingDirectory(ComposeWorkingDirectoryMode mode) throws IOException {
     InfrastructureExtractor extractor = new InfrastructureExtractor();
+    if (extractor.migrateLegacyWorkingDirectoryIfNeeded()) {
+      System.out.println(
+          "Migrated legacy compose working directory into "
+              + InfrastructureExtractor.COMPOSE_WORKING_DIR);
+    }
     if (mode == ComposeWorkingDirectoryMode.USE_EXISTING_WORKING_DIRECTORY
         && extractor.hasCompleteWorkingDirectory()) {
       return extractor.composePath();
@@ -122,10 +139,9 @@ class StartCommand implements Callable<Integer> {
 
   @Option(
       names = "--log-path",
-      defaultValue = "${SPLUNK_LOG_PATH:-./samples}",
       description =
           "Host directory mounted into the container as /var/log/springapp. Created if absent. Env:"
-              + " SPLUNK_LOG_PATH. Default: ${DEFAULT-VALUE}")
+          + " SPLUNK_LOG_PATH. Default: ~/.splunkctl/samples")
   private Path logPath;
 
   @Override
@@ -350,24 +366,46 @@ final class ContainerInspector {
 
 final class InfrastructureExtractor {
 
-  static final Path COMPOSE_WORKING_DIR =
-      Path.of(System.getProperty("user.home"), ".splunkctl");
+  static final Path SPLUNKCTL_HOME = Path.of(System.getProperty("user.home"), ".splunkctl");
+  static final Path COMPOSE_WORKING_DIR = SPLUNKCTL_HOME.resolve("compose-working-dir");
+  static final Path DEFAULT_SAMPLE_DIR = SPLUNKCTL_HOME.resolve("samples");
+
+  private static final Path LEGACY_COMPOSE_PATH = SPLUNKCTL_HOME.resolve("docker-compose.yml");
+  private static final Path LEGACY_DEFAULT_YML_PATH =
+      SPLUNKCTL_HOME.resolve(Path.of("docker", "splunk", "default.yml"));
 
   private static final String COMPOSE_RESOURCE = "docker-compose.yml";
-  private static final String DEFAULT_YML_RESOURCE = "docker/splunk/default.yml";
+  private static final String DEFAULT_YML_RESOURCE = "default.yml";
 
   Path composePath() {
     return COMPOSE_WORKING_DIR.resolve(COMPOSE_RESOURCE);
   }
 
+  Path defaultYmlPath() {
+    return COMPOSE_WORKING_DIR.resolve(DEFAULT_YML_RESOURCE);
+  }
+
+  boolean migrateLegacyWorkingDirectoryIfNeeded() throws IOException {
+    boolean hasLegacyCompose = Files.exists(LEGACY_COMPOSE_PATH);
+    boolean hasLegacyDefaultYml = Files.exists(LEGACY_DEFAULT_YML_PATH);
+    if (!hasLegacyCompose && !hasLegacyDefaultYml) {
+      return false;
+    }
+
+    Files.createDirectories(COMPOSE_WORKING_DIR);
+    moveIfPresent(LEGACY_COMPOSE_PATH, composePath());
+    moveIfPresent(LEGACY_DEFAULT_YML_PATH, defaultYmlPath());
+    deleteIfEmpty(SPLUNKCTL_HOME.resolve(Path.of("docker", "splunk")));
+    deleteIfEmpty(SPLUNKCTL_HOME.resolve("docker"));
+    return true;
+  }
+
   boolean hasAnyFiles() {
-    return Files.exists(COMPOSE_WORKING_DIR.resolve(COMPOSE_RESOURCE))
-        || Files.exists(COMPOSE_WORKING_DIR.resolve(DEFAULT_YML_RESOURCE));
+    return Files.exists(composePath()) || Files.exists(defaultYmlPath());
   }
 
   boolean hasCompleteWorkingDirectory() {
-    return Files.exists(COMPOSE_WORKING_DIR.resolve(COMPOSE_RESOURCE))
-        && Files.exists(COMPOSE_WORKING_DIR.resolve(DEFAULT_YML_RESOURCE));
+    return Files.exists(composePath()) && Files.exists(defaultYmlPath());
   }
 
   boolean hasIncompleteWorkingDirectory() {
@@ -378,6 +416,25 @@ final class InfrastructureExtractor {
     extractResource(COMPOSE_RESOURCE);
     extractResource(DEFAULT_YML_RESOURCE);
     return composePath();
+  }
+
+  private void moveIfPresent(Path source, Path target) throws IOException {
+    if (!Files.exists(source)) {
+      return;
+    }
+    Files.createDirectories(target.getParent());
+    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+  }
+
+  private void deleteIfEmpty(Path path) throws IOException {
+    if (!Files.isDirectory(path)) {
+      return;
+    }
+    try (Stream<Path> children = Files.list(path)) {
+      if (children.findAny().isEmpty()) {
+        Files.delete(path);
+      }
+    }
   }
 
   private void extractResource(String resource) throws IOException {

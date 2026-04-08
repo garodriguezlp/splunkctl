@@ -10,8 +10,8 @@ services:
       - "8000:8000"   # Splunk Web UI
       - "8089:8089"   # Splunk Management REST API
     volumes:
-      - ./docker/splunk/default.yml:/tmp/defaults/default.yml:ro
-      - ${LOG_PATH:-./samples}:/var/log/springapp:ro
+      - ./default.yml:/tmp/defaults/default.yml:ro
+      - ${LOG_PATH:-../samples}:/var/log/springapp:ro
       - splunk-data:/opt/splunk/var
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8000"]

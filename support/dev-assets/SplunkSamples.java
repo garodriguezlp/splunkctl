@@ -27,7 +27,10 @@ import picocli.CommandLine.Option;
     mixinStandardHelpOptions = true,
     version = "splunk-samples 0.1",
     description = "Generates fresh sample log files for splunkctl.")
-public class GenerateSamples implements Callable<Integer> {
+public class SplunkSamples implements Callable<Integer> {
+
+  private static final Path DEFAULT_OUTPUT_DIR =
+      Path.of(System.getProperty("user.home"), ".splunkctl", "samples");
 
   private static final String JSON_FILE_NAME = "app.log.json";
   private static final String PREFIXED_FILE_NAME = "app.log.prefixed";
@@ -37,8 +40,7 @@ public class GenerateSamples implements Callable<Integer> {
 
   @Option(
       names = "--output-dir",
-      defaultValue = "./samples",
-      description = "Directory where sample files will be written. Default: ${DEFAULT-VALUE}")
+      description = "Directory where sample files will be written. Default: ~/.splunkctl/samples")
   private Path outputDir;
 
   @Option(
@@ -48,28 +50,32 @@ public class GenerateSamples implements Callable<Integer> {
   private Instant baseTime;
 
   public static void main(String[] args) {
-    int exitCode = new CommandLine(new GenerateSamples()).execute(args);
+    int exitCode = new CommandLine(new SplunkSamples()).execute(args);
     System.exit(exitCode);
   }
 
   @Override
   public Integer call() throws IOException {
+    Path effectiveOutputDir = outputDir != null ? outputDir : DEFAULT_OUTPUT_DIR;
     List<SampleEvent> appEvents = sampleEvents();
     List<RtrEvent> rtrEvents = rtrEvents();
     Instant firstEventTime =
       (baseTime != null ? baseTime : Instant.now()).truncatedTo(ChronoUnit.MILLIS)
         .minusSeconds(appEvents.size() + rtrEvents.size() - 1L);
 
-    Files.createDirectories(outputDir);
-    Files.writeString(outputDir.resolve(JSON_FILE_NAME), buildJsonLines(appEvents, firstEventTime));
-    Files.writeString(outputDir.resolve(PREFIXED_FILE_NAME), buildPrefixedLines(appEvents, rtrEvents, firstEventTime));
+    Files.createDirectories(effectiveOutputDir);
+    Files.writeString(
+        effectiveOutputDir.resolve(JSON_FILE_NAME), buildJsonLines(appEvents, firstEventTime));
+    Files.writeString(
+        effectiveOutputDir.resolve(PREFIXED_FILE_NAME),
+        buildPrefixedLines(appEvents, rtrEvents, firstEventTime));
 
     System.out.println("Generated fresh samples:");
-    System.out.println("  " + outputDir.resolve(JSON_FILE_NAME).toAbsolutePath());
-    System.out.println("  " + outputDir.resolve(PREFIXED_FILE_NAME).toAbsolutePath());
+    System.out.println("  " + effectiveOutputDir.resolve(JSON_FILE_NAME).toAbsolutePath());
+    System.out.println("  " + effectiveOutputDir.resolve(PREFIXED_FILE_NAME).toAbsolutePath());
     System.out.println();
     System.out.println("Next step:");
-    System.out.println("  ./jbang splunkctl start --log-path " + outputDir.toAbsolutePath());
+    System.out.println("  ./jbang splunkctl start --log-path " + effectiveOutputDir.toAbsolutePath());
     return 0;
   }
 
