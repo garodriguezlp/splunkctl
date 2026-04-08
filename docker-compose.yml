@@ -1,0 +1,25 @@
+services:
+  splunk:
+    image: ${SPLUNK_IMAGE:-splunk/splunk:10.0.0}
+    container_name: splunk
+    environment:
+      SPLUNK_START_ARGS: --accept-license
+      SPLUNK_GENERAL_TERMS: --accept-sgt-current-at-splunk-com
+      SPLUNK_PASSWORD: ${SPLUNK_PASSWORD:-changeme123}
+    ports:
+      - "8000:8000"   # Splunk Web UI
+      - "8089:8089"   # Splunk Management REST API
+    volumes:
+      - ./docker/splunk/default.yml:/tmp/defaults/default.yml:ro
+      - ${LOG_PATH:-./samples}:/var/log/springapp:ro
+      - splunk-data:/opt/splunk/var
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  splunk-data:
+    name: splunkctl_splunk-data

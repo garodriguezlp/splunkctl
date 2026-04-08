@@ -1,0 +1,7 @@
+{
+  "aliases": {
+    "splunkctl": {
+      "script-ref": "SplunkCtl.java"
+    }
+  }
+}

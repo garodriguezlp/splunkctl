@@ -1,0 +1,10 @@
+2024-01-15T10:00:00.000Z OUT {"level":"INFO","message":"Application started","app":"demo"}
+2024-01-15T10:00:01.000Z OUT {"level":"INFO","message":"Received request","path":"/health","status":200}
+2024-01-15T10:00:02.000Z ERR {"level":"ERROR","message":"Connection failed","host":"db.example.com"}
+2024-01-15T10:00:03.000Z OUT {"level":"INFO","message":"Scheduled job executed","job":"cleanup","durationMs":42}
+2024-01-15T10:00:04.000Z OUT {"level":"WARN","message":"High memory usage","usedMb":812,"maxMb":1024}
+2024-01-15T10:00:05.000Z OUT {"level":"INFO","message":"Received request","path":"/api/users","status":200}
+2024-01-15T10:00:06.000Z ERR {"level":"ERROR","message":"Unhandled exception","exception":"NullPointerException","class":"UserService"}
+2024-01-15T10:00:07.000Z OUT {"level":"INFO","message":"Cache miss","key":"user:42","store":"redis"}
+2024-01-15T10:00:08.000Z OUT {"level":"INFO","message":"Received request","path":"/api/orders","status":201}
+2024-01-15T10:00:09.000Z OUT {"level":"DEBUG","message":"DB query executed","sql":"SELECT * FROM orders","durationMs":5}

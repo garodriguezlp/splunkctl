@@ -1,0 +1,37 @@
+---
+# Splunk provisioning config for docker-splunk (Ansible-based).
+# Bind-mounted to /tmp/defaults/default.yml inside the container.
+# The entrypoint merges this with built-in defaults and writes
+# /opt/splunk/etc/system/local/inputs.conf at startup.
+#
+# References:
+#   https://splunk.github.io/docker-splunk/ADVANCED.html#default-yml
+#   https://docs.splunk.com/Documentation/Splunk/latest/Admin/Inputsconf
+
+splunk:
+  conf:
+    - key: inputs
+      value:
+        directory: /opt/splunk/etc/system/local
+        content:
+          monitor:///var/log/springapp:
+            index: main
+            sourcetype: pcf_prefixed_json
+            followTail: "0"
+
+    - key: props
+      value:
+        directory: /opt/splunk/etc/system/local
+        content:
+          pcf_prefixed_json:
+            SHOULD_LINEMERGE: "false"
+            TRUNCATE: "0"
+            NO_BINARY_CHECK: "true"
+            CHARSET: UTF-8
+            # Strip everything before the first '{' so _raw becomes pure JSON.
+            # SEDCMD runs at index time after line-breaking.
+            # Do NOT use INDEXED_EXTRACTIONS=json — it activates JsonLineBreaker
+            # which tries to parse the raw stream before SEDCMD runs, causing
+            # "Unexpected character" errors on the prefix.
+            SEDCMD-strip_prefix_before_json: 's/^[^{]*//'
+            KV_MODE: json
