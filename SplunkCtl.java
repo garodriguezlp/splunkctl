@@ -1,12 +1,12 @@
-/// usr/bin/env jbang "$0" "$@" ; exit $?
+///usr/bin/env jbang "$0" "$@" ; exit $?
 
-// JAVA 17
+//JAVA 17
 
-// COMPILE_OPTIONS -encoding UTF-8
-// RUNTIME_OPTIONS -Dfile.encoding=UTF-8
+//COMPILE_OPTIONS -encoding UTF-8
+//RUNTIME_OPTIONS -Dfile.encoding=UTF-8
 
-// DEPS info.picocli:picocli:4.7.6
-// DEPS org.apache.commons:commons-exec:1.3
+//DEPS info.picocli:picocli:4.7.6
+//DEPS org.apache.commons:commons-exec:1.3
 
 import java.io.IOException;
 import java.io.OutputStream;

@@ -19,12 +19,20 @@ paths are constants, not CLI options.
 
 ## Code style
 
-- Small, single-purpose methods at one level of abstraction.
+- Keep one clear responsibility per class, record, and method. A single file may contain multiple concerns, but each type should still have one reason to change.
+- Commands coordinate use cases; they should not contain infrastructure details, shell construction, or environment probing logic.
+- Separate policy from detail: what the app decides should be distinct from how Docker, files, and processes are invoked.
+- Dependencies flow inward: CLI and process execution depend on core logic, not the other way around.
+- Prefer small, single-purpose methods at one level of abstraction. If a method mixes workflow steps with low-level mechanics, extract helpers or a dedicated type.
 - Intention-revealing names; no abbreviations outside the domain.
-- Boolean predicates: `isDockerRunning()`, `isComposeAvailable()`.
-- Private helpers over inline complexity; no deep nesting.
-- Extract magic strings as named constants.
+- Boolean predicates read as facts: `isDockerRunning()`, `isComposeAvailable()`, `hasRequiredConfig()`.
+- Model domain concepts explicitly with records or enums when they clarify behavior, for example `SplunkConfig`, `CommandResult`, or `ComposeCommand`.
+- Keep side effects at the edges. Parsing, validation, decision-making, and message formatting should be testable without spawning processes.
+- Private helpers over inline complexity; avoid deep nesting and temporal coupling.
+- Extract magic strings, exit codes, command fragments, and user-facing messages as named constants or value objects.
 - Prefer composition over inheritance. No Lombok. No framework annotations outside PicoCLI.
+- When adding behavior, first ask whether it belongs to command policy, shared application logic, or infrastructure detail. Put it in the owner of that concern.
+- Optimize for local readability over clever reuse. Duplication is cheaper than the wrong abstraction.
 
 ## For agents
 
