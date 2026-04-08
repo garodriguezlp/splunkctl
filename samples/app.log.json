@@ -1,10 +1,10 @@
-{"level":"INFO","message":"Application started","app":"demo","ts":"2024-01-15T10:00:00.000Z"}
-{"level":"INFO","message":"Received request","path":"/health","status":200,"ts":"2024-01-15T10:00:01.000Z"}
-{"level":"ERROR","message":"Connection failed","host":"db.example.com","ts":"2024-01-15T10:00:02.000Z"}
-{"level":"INFO","message":"Scheduled job executed","job":"cleanup","durationMs":42,"ts":"2024-01-15T10:00:03.000Z"}
-{"level":"WARN","message":"High memory usage","usedMb":812,"maxMb":1024,"ts":"2024-01-15T10:00:04.000Z"}
-{"level":"INFO","message":"Received request","path":"/api/users","status":200,"ts":"2024-01-15T10:00:05.000Z"}
-{"level":"ERROR","message":"Unhandled exception","exception":"NullPointerException","class":"UserService","ts":"2024-01-15T10:00:06.000Z"}
-{"level":"INFO","message":"Cache miss","key":"user:42","store":"redis","ts":"2024-01-15T10:00:07.000Z"}
-{"level":"INFO","message":"Received request","path":"/api/orders","status":201,"ts":"2024-01-15T10:00:08.000Z"}
-{"level":"DEBUG","message":"DB query executed","sql":"SELECT * FROM orders","durationMs":5,"ts":"2024-01-15T10:00:09.000Z"}
+{"level":"INFO","message":"Application started","app":"demo","ts":"2026-04-08T03:54:33.167Z"}
+{"level":"INFO","message":"Received request","path":"/health","status":200,"ts":"2026-04-08T03:54:34.167Z"}
+{"level":"ERROR","message":"Connection failed","host":"db.example.com","ts":"2026-04-08T03:54:35.167Z"}
+{"level":"INFO","message":"Scheduled job executed","job":"cleanup","durationMs":42,"ts":"2026-04-08T03:54:36.167Z"}
+{"level":"WARN","message":"High memory usage","usedMb":812,"maxMb":1024,"ts":"2026-04-08T03:54:37.167Z"}
+{"level":"INFO","message":"Received request","path":"/api/users","status":200,"ts":"2026-04-08T03:54:38.167Z"}
+{"level":"ERROR","message":"Unhandled exception","exception":"NullPointerException","class":"UserService","ts":"2026-04-08T03:54:39.167Z"}
+{"level":"INFO","message":"Cache miss","key":"user:42","store":"redis","ts":"2026-04-08T03:54:40.167Z"}
+{"level":"INFO","message":"Received request","path":"/api/orders","status":201,"ts":"2026-04-08T03:54:41.167Z"}
+{"level":"DEBUG","message":"DB query executed","sql":"SELECT * FROM orders","durationMs":5,"ts":"2026-04-08T03:54:42.167Z"}

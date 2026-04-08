@@ -1,5 +1,8 @@
 {
   "aliases": {
+    "splunk-samples": {
+      "script-ref": "GenerateSamples.java"
+    },
     "splunkctl": {
       "script-ref": "SplunkCtl.java"
     }
