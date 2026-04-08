@@ -1,2 +1,2 @@
-app.log.json
-app.log.prefixed
+*
+!.gitignore
