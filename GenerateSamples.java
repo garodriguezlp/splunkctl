@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
@@ -31,6 +32,8 @@ public class GenerateSamples implements Callable<Integer> {
   private static final String JSON_FILE_NAME = "app.log.json";
   private static final String PREFIXED_FILE_NAME = "app.log.prefixed";
   private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ISO_INSTANT;
+  private static final DateTimeFormatter RTR_INNER_FORMATTER =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'+0000'").withZone(ZoneOffset.UTC);
 
   @Option(
       names = "--output-dir",
@@ -51,14 +54,15 @@ public class GenerateSamples implements Callable<Integer> {
 
   @Override
   public Integer call() throws IOException {
-    List<SampleEvent> events = sampleEvents();
+    List<SampleEvent> appEvents = sampleEvents();
+    List<RtrEvent> rtrEvents = rtrEvents();
     Instant firstEventTime =
       (baseTime != null ? baseTime : Instant.now()).truncatedTo(ChronoUnit.MILLIS)
-        .minusSeconds(events.size() - 1L);
+        .minusSeconds(appEvents.size() + rtrEvents.size() - 1L);
 
     Files.createDirectories(outputDir);
-    Files.writeString(outputDir.resolve(JSON_FILE_NAME), buildJsonLines(events, firstEventTime));
-    Files.writeString(outputDir.resolve(PREFIXED_FILE_NAME), buildPrefixedLines(events, firstEventTime));
+    Files.writeString(outputDir.resolve(JSON_FILE_NAME), buildJsonLines(appEvents, firstEventTime));
+    Files.writeString(outputDir.resolve(PREFIXED_FILE_NAME), buildPrefixedLines(appEvents, rtrEvents, firstEventTime));
 
     System.out.println("Generated fresh samples:");
     System.out.println("  " + outputDir.resolve(JSON_FILE_NAME).toAbsolutePath());
@@ -79,19 +83,44 @@ public class GenerateSamples implements Callable<Integer> {
     return builder.toString();
   }
 
-  private String buildPrefixedLines(List<SampleEvent> events, Instant firstEventTime) {
+  private String buildPrefixedLines(List<SampleEvent> appEvents, List<RtrEvent> rtrEvents, Instant firstEventTime) {
     StringBuilder builder = new StringBuilder();
-    for (int index = 0; index < events.size(); index++) {
-      SampleEvent event = events.get(index);
+    for (int index = 0; index < appEvents.size(); index++) {
+      SampleEvent event = appEvents.get(index);
       Instant eventTime = firstEventTime.plusSeconds(index);
-      builder.append(TIMESTAMP_FORMATTER.format(eventTime));
-      builder.append(' ');
-      builder.append(event.stream());
-      builder.append(' ');
-      builder.append(toJsonLine(event, eventTime));
-      builder.append(System.lineSeparator());
+      builder.append(TIMESTAMP_FORMATTER.format(eventTime))
+             .append(" [APP/PROC/WEB/0] ")
+             .append(event.stream())
+             .append(' ')
+             .append(toJsonLine(event, eventTime))
+             .append(System.lineSeparator());
+    }
+    Instant rtrBase = firstEventTime.plusSeconds(appEvents.size());
+    for (int index = 0; index < rtrEvents.size(); index++) {
+      RtrEvent event = rtrEvents.get(index);
+      Instant eventTime = rtrBase.plusSeconds(index);
+      builder.append(TIMESTAMP_FORMATTER.format(eventTime))
+             .append(" [RTR/0] OUT ")
+             .append(toRtrLine(event, eventTime))
+             .append(System.lineSeparator());
     }
     return builder.toString();
+  }
+
+  private List<RtrEvent> rtrEvents() {
+    return List.of(
+        new RtrEvent("api.example.com", "GET", "/health", 200, 0.001234),
+        new RtrEvent("api.example.com", "POST", "/api/users", 201, 0.045678),
+        new RtrEvent("api.example.com", "GET", "/api/orders", 500, 0.098765));
+  }
+
+  private String toRtrLine(RtrEvent event, Instant ts) {
+    String innerTs = RTR_INNER_FORMATTER.format(ts);
+    return String.format(
+        "%s - [%s] \"%s %s HTTP/1.1\" %d 0 512 \"-\" \"Go-http-client/1.1\""
+            + " \"10.0.0.1:12345\" \"10.0.0.2:8080\" response_time:%.6f"
+            + " app_id:\"demo-app\" app_index:\"0\"",
+        event.host(), innerTs, event.method(), event.path(), event.status(), event.responseTime());
   }
 
   private String toJsonLine(SampleEvent event, Instant eventTime) {
@@ -194,3 +223,5 @@ public class GenerateSamples implements Callable<Integer> {
 }
 
 record SampleEvent(String stream, String level, String message, Map<String, Object> fields) {}
+
+record RtrEvent(String host, String method, String path, int status, double responseTime) {}

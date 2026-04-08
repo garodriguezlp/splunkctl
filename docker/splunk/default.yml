@@ -1,8 +1,20 @@
 ---
 # Splunk provisioning config for docker-splunk (Ansible-based).
 # Bind-mounted to /tmp/defaults/default.yml inside the container.
-# The entrypoint merges this with built-in defaults and writes
-# /opt/splunk/etc/system/local/inputs.conf at startup.
+# The entrypoint merges this with built-in defaults and writes conf files
+# under /opt/splunk/etc/system/local/ at startup.
+#
+# Pipeline for Cloud Foundry (cf logs) output:
+#   Every line follows the CF envelope format:
+#     <ts> [<component>/<instance>] <OUT|ERR> <payload>
+#
+# Routing strategy:
+#   1. The monitor assigns sourcetype pcf_cf_raw to every line.
+#   2. A single TRANSFORMS stanza detects whether the payload is JSON
+#      (i.e. the part after OUT/ERR starts with '{') and routes those
+#      lines to pcf_app for rich JSON extraction.
+#   3. Non-JSON lines (e.g. gorouter RTR access logs) stay as pcf_cf_raw
+#      and get best-effort KV extraction via KV_MODE=auto.
 #
 # References:
 #   https://splunk.github.io/docker-splunk/ADVANCED.html#default-yml
@@ -16,22 +28,36 @@ splunk:
         content:
           monitor:///var/log/springapp:
             index: main
-            sourcetype: pcf_prefixed_json
+            sourcetype: pcf_cf_raw
             followTail: "0"
+
+    - key: transforms
+      value:
+        directory: /opt/splunk/etc/system/local
+        content:
+          pcf_route_json:
+            REGEX: '^\{'
+            DEST_KEY: MetaData:Sourcetype
+            FORMAT: sourcetype::pcf_app
 
     - key: props
       value:
         directory: /opt/splunk/etc/system/local
         content:
-          pcf_prefixed_json:
+          pcf_cf_raw:
             SHOULD_LINEMERGE: "false"
             TRUNCATE: "0"
             NO_BINARY_CHECK: "true"
             CHARSET: UTF-8
-            # Strip everything before the first '{' so _raw becomes pure JSON.
-            # SEDCMD runs at index time after line-breaking.
-            # Do NOT use INDEXED_EXTRACTIONS=json — it activates JsonLineBreaker
-            # which tries to parse the raw stream before SEDCMD runs, causing
-            # "Unexpected character" errors on the prefix.
-            SEDCMD-strip_prefix_before_json: 's/^[^{]*//'
+            # Strip everything before the first '{' (inclusive) so JSON lines become
+            # pure JSON after this runs. Safe for non-JSON (RTR) lines: no-op when
+            # there is no '{'. SEDCMD on the originating sourcetype applies to all
+            # events including those re-routed by TRANSFORMS below.
+            SEDCMD-strip_cf_envelope: "s/^[^{]*{/{/"
+            TRANSFORMS-route: pcf_route_json
+            KV_MODE: auto
+          pcf_app:
+            SHOULD_LINEMERGE: "false"
+            # _raw is already pure JSON by the time this stanza applies (stripped by
+            # pcf_cf_raw SEDCMD above). KV_MODE=json extracts all fields from the object.
             KV_MODE: json
