@@ -126,6 +126,7 @@ class StatusCommand implements Callable<Integer> {
   public Integer call() {
     SplunkConfig config = parent.config(Path.of("."));
     if (!new PreconditionChecker().check()) return 1;
+    new ContainerInspector().printActualConfig();
     return new DockerComposeRunner().ps(config);
   }
 }
@@ -224,5 +225,44 @@ final class DockerComposeRunner {
     env.put("SPLUNK_IMAGE", config.splunkImage());
     env.put("SPLUNK_PASSWORD", config.splunkPassword());
     return env;
+  }
+}
+
+final class ContainerInspector {
+
+  private static final String CONTAINER_NAME = "splunk";
+  private static final String INSPECT_FORMAT =
+      "Image:  {{.Config.Image}}\n"
+          + "Mounts:{{range .HostConfig.Binds}}\n"
+          + "  {{.}}{{end}}\n"
+          + "Env:{{range .Config.Env}}\n"
+          + "  {{.}}{{end}}";
+
+  void printActualConfig() {
+    System.out.println("Container configuration (from Docker):");
+    int exitCode = runInspect();
+    if (exitCode != 0) {
+      System.out.println("  (container '" + CONTAINER_NAME + "' is not running)");
+    }
+    System.out.println();
+  }
+
+  private int runInspect() {
+    try {
+      org.apache.commons.exec.CommandLine cmd =
+          new org.apache.commons.exec.CommandLine("docker");
+      cmd.addArgument("inspect");
+      cmd.addArgument("--format");
+      cmd.addArgument(INSPECT_FORMAT, false);
+      cmd.addArgument(CONTAINER_NAME);
+      DefaultExecutor executor = new DefaultExecutor();
+      executor.setStreamHandler(
+          new PumpStreamHandler(System.out, OutputStream.nullOutputStream()));
+      executor.setExitValues(null);
+      return executor.execute(cmd);
+    } catch (Exception e) {
+      System.err.println("Error: docker inspect failed: " + e.getMessage());
+      return 1;
+    }
   }
 }
