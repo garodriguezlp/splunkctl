@@ -66,31 +66,31 @@ public class SplunkCtl implements Callable<Integer> {
   }
 
   /**
-   * Ensures ~/.splunkctl contains the bundled docker-compose context files and returns
+   * Ensures ~/.splunkctl contains the bundled Compose working directory files and returns
    * the path to docker-compose.yml.
    */
-  Path prepareDockerContext(DockerContextMode mode) throws IOException {
+  Path prepareComposeWorkingDirectory(ComposeWorkingDirectoryMode mode) throws IOException {
     InfrastructureExtractor extractor = new InfrastructureExtractor();
-    if (mode == DockerContextMode.USE_EXISTING_CONTEXT && extractor.hasCompleteContext()) {
+    if (mode == ComposeWorkingDirectoryMode.USE_EXISTING_WORKING_DIRECTORY
+        && extractor.hasCompleteWorkingDirectory()) {
       return extractor.composePath();
     }
-    if (mode == DockerContextMode.USE_EXISTING_CONTEXT) {
+    if (mode == ComposeWorkingDirectoryMode.USE_EXISTING_WORKING_DIRECTORY) {
       System.out.println(
-          "Docker context is missing or incomplete. Restoring bundled files in "
-              + InfrastructureExtractor.CONTEXT_DIR);
+          "Compose working directory is missing or incomplete. Restoring bundled files in "
+              + InfrastructureExtractor.COMPOSE_WORKING_DIR);
       return extractor.extract();
     }
-    System.out.println("Docker context (compose working directory): " + InfrastructureExtractor.CONTEXT_DIR);
-    if (extractor.hasIncompleteContext()) {
+    if (extractor.hasIncompleteWorkingDirectory()) {
       System.out.println(
-          "Docker context is incomplete. Restoring bundled files in "
-              + InfrastructureExtractor.CONTEXT_DIR);
+          "Compose working directory is incomplete. Restoring bundled files in "
+              + InfrastructureExtractor.COMPOSE_WORKING_DIR);
       return extractor.extract();
     }
     if (extractor.hasAnyFiles()) {
       System.out.println(
           "Warning: files already exist in "
-              + InfrastructureExtractor.CONTEXT_DIR
+              + InfrastructureExtractor.COMPOSE_WORKING_DIR
               + " and will be overwritten with bundled defaults.");
       System.out.print("Continue? [N/y]: ");
       String answer = new Scanner(System.in).nextLine().trim();
@@ -101,11 +101,16 @@ public class SplunkCtl implements Callable<Integer> {
     }
     return extractor.extract();
   }
+
+  void printComposeWorkingDirectory() {
+    System.out.println(
+        "Compose working directory: " + InfrastructureExtractor.COMPOSE_WORKING_DIR.toAbsolutePath());
+  }
 }
 
-enum DockerContextMode {
+enum ComposeWorkingDirectoryMode {
   PROMPT_BEFORE_OVERWRITE,
-  USE_EXISTING_CONTEXT
+  USE_EXISTING_WORKING_DIRECTORY
 }
 
 // --- Commands ---
@@ -127,8 +132,10 @@ class StartCommand implements Callable<Integer> {
   public Integer call() throws IOException {
     SplunkConfig config = parent.config(logPath);
     if (!new PreconditionChecker().check()) return 1;
-    Path composePath = parent.prepareDockerContext(DockerContextMode.PROMPT_BEFORE_OVERWRITE);
+    Path composePath =
+        parent.prepareComposeWorkingDirectory(ComposeWorkingDirectoryMode.PROMPT_BEFORE_OVERWRITE);
     Files.createDirectories(config.logPath());
+    parent.printComposeWorkingDirectory();
     new ContainerInspector().printEffectiveConfig(config);
     int exitCode = new DockerComposeRunner(composePath).up(config);
     if (exitCode == 0) {
@@ -150,7 +157,10 @@ class StopCommand implements Callable<Integer> {
   public Integer call() throws IOException {
     SplunkConfig config = parent.config(Path.of("."));
     if (!new PreconditionChecker().check()) return 1;
-    Path composePath = parent.prepareDockerContext(DockerContextMode.USE_EXISTING_CONTEXT);
+    Path composePath =
+        parent.prepareComposeWorkingDirectory(
+            ComposeWorkingDirectoryMode.USE_EXISTING_WORKING_DIRECTORY);
+    parent.printComposeWorkingDirectory();
     return new DockerComposeRunner(composePath).down(config);
   }
 }
@@ -164,7 +174,10 @@ class DestroyCommand implements Callable<Integer> {
   public Integer call() throws IOException {
     SplunkConfig config = parent.config(Path.of("."));
     if (!new PreconditionChecker().check()) return 1;
-    Path composePath = parent.prepareDockerContext(DockerContextMode.USE_EXISTING_CONTEXT);
+    Path composePath =
+        parent.prepareComposeWorkingDirectory(
+            ComposeWorkingDirectoryMode.USE_EXISTING_WORKING_DIRECTORY);
+    parent.printComposeWorkingDirectory();
     return new DockerComposeRunner(composePath).downWithVolumes(config);
   }
 }
@@ -178,7 +191,10 @@ class StatusCommand implements Callable<Integer> {
   public Integer call() throws IOException {
     SplunkConfig config = parent.config(Path.of("."));
     if (!new PreconditionChecker().check()) return 1;
-    Path composePath = parent.prepareDockerContext(DockerContextMode.USE_EXISTING_CONTEXT);
+    Path composePath =
+        parent.prepareComposeWorkingDirectory(
+            ComposeWorkingDirectoryMode.USE_EXISTING_WORKING_DIRECTORY);
+    parent.printComposeWorkingDirectory();
     new ContainerInspector().printActualConfig();
     return new DockerComposeRunner(composePath).ps(config);
   }
@@ -334,28 +350,28 @@ final class ContainerInspector {
 
 final class InfrastructureExtractor {
 
-  static final Path CONTEXT_DIR =
+  static final Path COMPOSE_WORKING_DIR =
       Path.of(System.getProperty("user.home"), ".splunkctl");
 
   private static final String COMPOSE_RESOURCE = "docker-compose.yml";
   private static final String DEFAULT_YML_RESOURCE = "docker/splunk/default.yml";
 
   Path composePath() {
-    return CONTEXT_DIR.resolve(COMPOSE_RESOURCE);
+    return COMPOSE_WORKING_DIR.resolve(COMPOSE_RESOURCE);
   }
 
   boolean hasAnyFiles() {
-    return Files.exists(CONTEXT_DIR.resolve(COMPOSE_RESOURCE))
-        || Files.exists(CONTEXT_DIR.resolve(DEFAULT_YML_RESOURCE));
+    return Files.exists(COMPOSE_WORKING_DIR.resolve(COMPOSE_RESOURCE))
+        || Files.exists(COMPOSE_WORKING_DIR.resolve(DEFAULT_YML_RESOURCE));
   }
 
-  boolean hasCompleteContext() {
-    return Files.exists(CONTEXT_DIR.resolve(COMPOSE_RESOURCE))
-        && Files.exists(CONTEXT_DIR.resolve(DEFAULT_YML_RESOURCE));
+  boolean hasCompleteWorkingDirectory() {
+    return Files.exists(COMPOSE_WORKING_DIR.resolve(COMPOSE_RESOURCE))
+        && Files.exists(COMPOSE_WORKING_DIR.resolve(DEFAULT_YML_RESOURCE));
   }
 
-  boolean hasIncompleteContext() {
-    return hasAnyFiles() && !hasCompleteContext();
+  boolean hasIncompleteWorkingDirectory() {
+    return hasAnyFiles() && !hasCompleteWorkingDirectory();
   }
 
   Path extract() throws IOException {
@@ -365,7 +381,7 @@ final class InfrastructureExtractor {
   }
 
   private void extractResource(String resource) throws IOException {
-    Path target = CONTEXT_DIR.resolve(resource);
+    Path target = COMPOSE_WORKING_DIR.resolve(resource);
     Files.createDirectories(target.getParent());
     try (InputStream in = getClass().getClassLoader().getResourceAsStream(resource)) {
       if (in == null) throw new IllegalStateException("Missing bundled resource: " + resource);

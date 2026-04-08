@@ -108,6 +108,14 @@ splunk-password=mysecurepassword
 log-path=/Users/me/app-logs
 ```
 
+### Compose working directory
+
+`splunkctl` extracts its bundled `docker-compose.yml` and Splunk defaults into `~/.splunkctl` and runs `docker-compose` from there.
+
+- `start` reuses that working directory and prompts before overwriting an existing complete set of files.
+- `stop`, `destroy`, and `status` reuse the existing working directory and restore the bundled files automatically if they are missing or incomplete.
+- Every command prints the active compose working directory so you can see exactly which files are being used.
+
 ## Splunk jump start
 
 Use `./jbang splunk-samples` to regenerate the demo files in `samples/` with timestamps anchored to the current time. That keeps them visible in Splunk's default UI window and makes API examples work with rolling searches like `earliest_time=-15m`.
