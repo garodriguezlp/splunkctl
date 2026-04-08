@@ -80,6 +80,7 @@ class StartCommand implements Callable<Integer> {
     SplunkConfig config = parent.config(logPath);
     if (!new PreconditionChecker().check()) return 1;
     Files.createDirectories(config.logPath());
+    new ContainerInspector().printEffectiveConfig(config);
     int exitCode = new DockerComposeRunner().up(config);
     if (exitCode == 0) {
       System.out.println(
@@ -237,6 +238,14 @@ final class ContainerInspector {
           + "  {{.}}{{end}}\n"
           + "Env:{{range .Config.Env}}\n"
           + "  {{.}}{{end}}";
+
+  void printEffectiveConfig(SplunkConfig config) {
+    System.out.println("Effective configuration:");
+    System.out.println("  Image:     " + config.splunkImage());
+    System.out.println("  Log path:  " + config.logPath().toAbsolutePath());
+    System.out.println("  Password:  " + config.splunkPassword());
+    System.out.println();
+  }
 
   void printActualConfig() {
     System.out.println("Container configuration (from Docker):");
