@@ -62,7 +62,7 @@ public class SplunkCtl implements Callable<Integer> {
 
 // --- Commands ---
 
-@Command(name = "start", description = "Start the Splunk container in detached mode.")
+@Command(name = "start", mixinStandardHelpOptions = true, description = "Start the Splunk container in detached mode.")
 class StartCommand implements Callable<Integer> {
 
   @ParentCommand private SplunkCtl parent;
@@ -92,7 +92,7 @@ class StartCommand implements Callable<Integer> {
   }
 }
 
-@Command(name = "stop", description = "Stop and remove containers, preserving volumes.")
+@Command(name = "stop", mixinStandardHelpOptions = true, description = "Stop and remove containers, preserving volumes.")
 class StopCommand implements Callable<Integer> {
 
   @ParentCommand private SplunkCtl parent;
@@ -105,7 +105,7 @@ class StopCommand implements Callable<Integer> {
   }
 }
 
-@Command(name = "destroy", description = "Tear down containers and remove all volumes.")
+@Command(name = "destroy", mixinStandardHelpOptions = true, description = "Tear down containers and remove all volumes.")
 class DestroyCommand implements Callable<Integer> {
 
   @ParentCommand private SplunkCtl parent;
@@ -118,7 +118,7 @@ class DestroyCommand implements Callable<Integer> {
   }
 }
 
-@Command(name = "status", description = "Show current state of the managed containers.")
+@Command(name = "status", mixinStandardHelpOptions = true, description = "Show current state of the managed containers.")
 class StatusCommand implements Callable<Integer> {
 
   @ParentCommand private SplunkCtl parent;
