@@ -67,13 +67,27 @@ public class SplunkCtl implements Callable<Integer> {
 
   /**
    * Ensures ~/.splunkctl contains the bundled docker-compose context files and returns
-   * the path to docker-compose.yml. If files already exist the user is asked whether to
-   * overwrite; declining keeps the existing files and proceeds normally.
+   * the path to docker-compose.yml.
    */
-  Path prepareDockerContext() throws IOException {
+  Path prepareDockerContext(DockerContextMode mode) throws IOException {
     InfrastructureExtractor extractor = new InfrastructureExtractor();
+    if (mode == DockerContextMode.USE_EXISTING_CONTEXT && extractor.hasCompleteContext()) {
+      return extractor.composePath();
+    }
+    if (mode == DockerContextMode.USE_EXISTING_CONTEXT) {
+      System.out.println(
+          "Docker context is missing or incomplete. Restoring bundled files in "
+              + InfrastructureExtractor.CONTEXT_DIR);
+      return extractor.extract();
+    }
     System.out.println("Docker context (compose working directory): " + InfrastructureExtractor.CONTEXT_DIR);
-    if (extractor.hasExistingFiles()) {
+    if (extractor.hasIncompleteContext()) {
+      System.out.println(
+          "Docker context is incomplete. Restoring bundled files in "
+              + InfrastructureExtractor.CONTEXT_DIR);
+      return extractor.extract();
+    }
+    if (extractor.hasAnyFiles()) {
       System.out.println(
           "Warning: files already exist in "
               + InfrastructureExtractor.CONTEXT_DIR
@@ -82,11 +96,16 @@ public class SplunkCtl implements Callable<Integer> {
       String answer = new Scanner(System.in).nextLine().trim();
       if (!answer.equalsIgnoreCase("y")) {
         System.out.println("Keeping existing context.");
-        return InfrastructureExtractor.CONTEXT_DIR.resolve("docker-compose.yml");
+        return extractor.composePath();
       }
     }
     return extractor.extract();
   }
+}
+
+enum DockerContextMode {
+  PROMPT_BEFORE_OVERWRITE,
+  USE_EXISTING_CONTEXT
 }
 
 // --- Commands ---
@@ -108,7 +127,7 @@ class StartCommand implements Callable<Integer> {
   public Integer call() throws IOException {
     SplunkConfig config = parent.config(logPath);
     if (!new PreconditionChecker().check()) return 1;
-    Path composePath = parent.prepareDockerContext();
+    Path composePath = parent.prepareDockerContext(DockerContextMode.PROMPT_BEFORE_OVERWRITE);
     Files.createDirectories(config.logPath());
     new ContainerInspector().printEffectiveConfig(config);
     int exitCode = new DockerComposeRunner(composePath).up(config);
@@ -131,7 +150,7 @@ class StopCommand implements Callable<Integer> {
   public Integer call() throws IOException {
     SplunkConfig config = parent.config(Path.of("."));
     if (!new PreconditionChecker().check()) return 1;
-    Path composePath = parent.prepareDockerContext();
+    Path composePath = parent.prepareDockerContext(DockerContextMode.USE_EXISTING_CONTEXT);
     return new DockerComposeRunner(composePath).down(config);
   }
 }
@@ -145,7 +164,7 @@ class DestroyCommand implements Callable<Integer> {
   public Integer call() throws IOException {
     SplunkConfig config = parent.config(Path.of("."));
     if (!new PreconditionChecker().check()) return 1;
-    Path composePath = parent.prepareDockerContext();
+    Path composePath = parent.prepareDockerContext(DockerContextMode.USE_EXISTING_CONTEXT);
     return new DockerComposeRunner(composePath).downWithVolumes(config);
   }
 }
@@ -159,7 +178,7 @@ class StatusCommand implements Callable<Integer> {
   public Integer call() throws IOException {
     SplunkConfig config = parent.config(Path.of("."));
     if (!new PreconditionChecker().check()) return 1;
-    Path composePath = parent.prepareDockerContext();
+    Path composePath = parent.prepareDockerContext(DockerContextMode.USE_EXISTING_CONTEXT);
     new ContainerInspector().printActualConfig();
     return new DockerComposeRunner(composePath).ps(config);
   }
@@ -321,15 +340,28 @@ final class InfrastructureExtractor {
   private static final String COMPOSE_RESOURCE = "docker-compose.yml";
   private static final String DEFAULT_YML_RESOURCE = "docker/splunk/default.yml";
 
-  boolean hasExistingFiles() {
+  Path composePath() {
+    return CONTEXT_DIR.resolve(COMPOSE_RESOURCE);
+  }
+
+  boolean hasAnyFiles() {
     return Files.exists(CONTEXT_DIR.resolve(COMPOSE_RESOURCE))
         || Files.exists(CONTEXT_DIR.resolve(DEFAULT_YML_RESOURCE));
+  }
+
+  boolean hasCompleteContext() {
+    return Files.exists(CONTEXT_DIR.resolve(COMPOSE_RESOURCE))
+        && Files.exists(CONTEXT_DIR.resolve(DEFAULT_YML_RESOURCE));
+  }
+
+  boolean hasIncompleteContext() {
+    return hasAnyFiles() && !hasCompleteContext();
   }
 
   Path extract() throws IOException {
     extractResource(COMPOSE_RESOURCE);
     extractResource(DEFAULT_YML_RESOURCE);
-    return CONTEXT_DIR.resolve(COMPOSE_RESOURCE);
+    return composePath();
   }
 
   private void extractResource(String resource) throws IOException {
