@@ -4,17 +4,45 @@
 # The entrypoint merges this with built-in defaults and writes conf files
 # under /opt/splunk/etc/system/local/ at startup.
 #
-# Pipeline for Cloud Foundry (cf logs) output:
-#   Every line follows the CF envelope format:
-#     <ts> [<component>/<instance>] <OUT|ERR> <payload>
+# ─────────────────────────────────────────────────────────────────────────────
+# Event flow for PCF logs
+# ─────────────────────────────────────────────────────────────────────────────
 #
-# Routing strategy:
-#   1. The monitor assigns sourcetype pcf_cf_raw to every line.
-#   2. A single TRANSFORMS stanza detects whether the payload is JSON
-#      (i.e. the part after OUT/ERR starts with '{') and routes those
-#      lines to pcf_app for rich JSON extraction.
-#   3. Non-JSON lines (e.g. gorouter RTR access logs) stay as pcf_cf_raw
-#      and get best-effort KV extraction via KV_MODE=auto.
+#  Raw CF line (from file monitor):
+#    <ts> [<component>/<instance>] OUT {"app":"x","level":"info",...}
+#
+#  inputs.conf  ──► assigns index=main, sourcetype=pcf_cf_raw
+#                   (every incoming line starts life as pcf_cf_raw)
+#
+#  props.conf [pcf_cf_raw]
+#    │
+#    ├─► SEDCMD-strip_cf_envelope  ──► rewrites _raw in-place
+#    │     s/^[^{]*{/{/            ──► strips the CF envelope so that JSON
+#    │                                 lines become pure JSON, e.g.:
+#    │                                   "<ts> [app/0] OUT {…}" → "{…}"
+#    │                                 non-JSON lines (RTR, etc.) are unchanged
+#    │                                 (no '{' in them → sed no-op).
+#    │                                 NOTE: SEDCMD runs BEFORE TRANSFORMS, so
+#    │                                 ALL events — including those later
+#    │                                 re-routed to pcf_app — see stripped _raw.
+#    │
+#    └─► TRANSFORMS-route = pcf_route_json
+#          │
+#          ├─ _raw starts with '{'? ──► YES ──► MetaData:Sourcetype = pcf_app
+#          │                                         │
+#          │                                    props.conf [pcf_app]
+#          │                                      KV_MODE=json
+#          │                                      (_raw is already pure JSON,
+#          │                                       all fields extracted)
+#          │
+#          └─ _raw does NOT start with '{'? ──► stays as pcf_cf_raw
+#                                                   │
+#                                              props.conf [pcf_cf_raw]
+#                                                KV_MODE=auto
+#                                                (best-effort key=value
+#                                                 extraction, e.g. RTR lines)
+#
+# ─────────────────────────────────────────────────────────────────────────────
 #
 # References:
 #   https://splunk.github.io/docker-splunk/ADVANCED.html#default-yml
@@ -37,7 +65,11 @@ splunk:
         content:
           pcf_route_json:
             REGEX: '^\{'
+            # MetaData:Sourcetype is Splunk's internal token notation for the
+            # sourcetype metadata field. Writing to it re-labels the event's
+            # sourcetype at index time without changing the raw data.
             DEST_KEY: MetaData:Sourcetype
+            # field::value assignment syntax: sets the sourcetype field to pcf_app.
             FORMAT: sourcetype::pcf_app
 
     - key: props
@@ -49,10 +81,11 @@ splunk:
             TRUNCATE: "0"
             NO_BINARY_CHECK: "true"
             CHARSET: UTF-8
-            # Strip everything before the first '{' (inclusive) so JSON lines become
-            # pure JSON after this runs. Safe for non-JSON (RTR) lines: no-op when
-            # there is no '{'. SEDCMD on the originating sourcetype applies to all
-            # events including those re-routed by TRANSFORMS below.
+            # Strip everything before the first '{' so JSON lines become pure
+            # JSON. Safe for non-JSON (RTR) lines: sed is a no-op when there
+            # is no '{'. Crucially, SEDCMD runs BEFORE TRANSFORMS-route, so
+            # events re-routed to pcf_app by the transform already have the CF
+            # envelope removed — that is why pcf_app can safely use KV_MODE=json.
             SEDCMD-strip_cf_envelope: "s/^[^{]*{/{/"
             TRANSFORMS-route: pcf_route_json
             KV_MODE: auto
