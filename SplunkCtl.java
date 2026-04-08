@@ -8,11 +8,17 @@
 //DEPS info.picocli:picocli:4.7.6
 //DEPS org.apache.commons:commons-exec:1.3
 
+//FILES docker-compose.yml
+//FILES docker/splunk/default.yml=docker/splunk/default.yml
+
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
+import java.util.Scanner;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import org.apache.commons.exec.DefaultExecutor;
@@ -58,6 +64,29 @@ public class SplunkCtl implements Callable<Integer> {
   SplunkConfig config(Path logPath) {
     return new SplunkConfig(logPath, splunkImage, splunkPassword);
   }
+
+  /**
+   * Ensures ~/.splunkctl contains the bundled docker-compose context files and returns
+   * the path to docker-compose.yml. If files already exist the user is asked whether to
+   * overwrite; declining keeps the existing files and proceeds normally.
+   */
+  Path prepareDockerContext() throws IOException {
+    InfrastructureExtractor extractor = new InfrastructureExtractor();
+    System.out.println("Docker context (compose working directory): " + InfrastructureExtractor.CONTEXT_DIR);
+    if (extractor.hasExistingFiles()) {
+      System.out.println(
+          "Warning: files already exist in "
+              + InfrastructureExtractor.CONTEXT_DIR
+              + " and will be overwritten with bundled defaults.");
+      System.out.print("Continue? [N/y]: ");
+      String answer = new Scanner(System.in).nextLine().trim();
+      if (!answer.equalsIgnoreCase("y")) {
+        System.out.println("Keeping existing context.");
+        return InfrastructureExtractor.CONTEXT_DIR.resolve("docker-compose.yml");
+      }
+    }
+    return extractor.extract();
+  }
 }
 
 // --- Commands ---
@@ -79,9 +108,10 @@ class StartCommand implements Callable<Integer> {
   public Integer call() throws IOException {
     SplunkConfig config = parent.config(logPath);
     if (!new PreconditionChecker().check()) return 1;
+    Path composePath = parent.prepareDockerContext();
     Files.createDirectories(config.logPath());
     new ContainerInspector().printEffectiveConfig(config);
-    int exitCode = new DockerComposeRunner().up(config);
+    int exitCode = new DockerComposeRunner(composePath).up(config);
     if (exitCode == 0) {
       System.out.println(
           "Splunk started. Web UI: http://localhost:8000 (admin / "
@@ -98,10 +128,11 @@ class StopCommand implements Callable<Integer> {
   @ParentCommand private SplunkCtl parent;
 
   @Override
-  public Integer call() {
+  public Integer call() throws IOException {
     SplunkConfig config = parent.config(Path.of("."));
     if (!new PreconditionChecker().check()) return 1;
-    return new DockerComposeRunner().down(config);
+    Path composePath = parent.prepareDockerContext();
+    return new DockerComposeRunner(composePath).down(config);
   }
 }
 
@@ -111,10 +142,11 @@ class DestroyCommand implements Callable<Integer> {
   @ParentCommand private SplunkCtl parent;
 
   @Override
-  public Integer call() {
+  public Integer call() throws IOException {
     SplunkConfig config = parent.config(Path.of("."));
     if (!new PreconditionChecker().check()) return 1;
-    return new DockerComposeRunner().downWithVolumes(config);
+    Path composePath = parent.prepareDockerContext();
+    return new DockerComposeRunner(composePath).downWithVolumes(config);
   }
 }
 
@@ -124,11 +156,12 @@ class StatusCommand implements Callable<Integer> {
   @ParentCommand private SplunkCtl parent;
 
   @Override
-  public Integer call() {
+  public Integer call() throws IOException {
     SplunkConfig config = parent.config(Path.of("."));
     if (!new PreconditionChecker().check()) return 1;
+    Path composePath = parent.prepareDockerContext();
     new ContainerInspector().printActualConfig();
-    return new DockerComposeRunner().ps(config);
+    return new DockerComposeRunner(composePath).ps(config);
   }
 }
 
@@ -173,7 +206,11 @@ final class PreconditionChecker {
 
 final class DockerComposeRunner {
 
-  private static final String COMPOSE_FILE = "./docker-compose.yml";
+  private final Path composePath;
+
+  DockerComposeRunner(Path composePath) {
+    this.composePath = composePath;
+  }
 
   int up(SplunkConfig config) {
     return run(config, "up", "-d");
@@ -213,7 +250,7 @@ final class DockerComposeRunner {
     org.apache.commons.exec.CommandLine cmd =
         new org.apache.commons.exec.CommandLine("docker-compose");
     cmd.addArgument("-f");
-    cmd.addArgument(COMPOSE_FILE);
+    cmd.addArgument(composePath.toAbsolutePath().toString());
     for (String arg : composeArgs) {
       cmd.addArgument(arg);
     }
@@ -240,7 +277,7 @@ final class ContainerInspector {
           + "  {{.}}{{end}}";
 
   void printEffectiveConfig(SplunkConfig config) {
-    System.out.println("Effective configuration:");
+    System.out.println("\nEffective configuration:");
     System.out.println("  Image:     " + config.splunkImage());
     System.out.println("  Log path:  " + config.logPath().toAbsolutePath());
     System.out.println("  Password:  " + config.splunkPassword());
@@ -272,6 +309,35 @@ final class ContainerInspector {
     } catch (Exception e) {
       System.err.println("Error: docker inspect failed: " + e.getMessage());
       return 1;
+    }
+  }
+}
+
+final class InfrastructureExtractor {
+
+  static final Path CONTEXT_DIR =
+      Path.of(System.getProperty("user.home"), ".splunkctl");
+
+  private static final String COMPOSE_RESOURCE = "docker-compose.yml";
+  private static final String DEFAULT_YML_RESOURCE = "docker/splunk/default.yml";
+
+  boolean hasExistingFiles() {
+    return Files.exists(CONTEXT_DIR.resolve(COMPOSE_RESOURCE))
+        || Files.exists(CONTEXT_DIR.resolve(DEFAULT_YML_RESOURCE));
+  }
+
+  Path extract() throws IOException {
+    extractResource(COMPOSE_RESOURCE);
+    extractResource(DEFAULT_YML_RESOURCE);
+    return CONTEXT_DIR.resolve(COMPOSE_RESOURCE);
+  }
+
+  private void extractResource(String resource) throws IOException {
+    Path target = CONTEXT_DIR.resolve(resource);
+    Files.createDirectories(target.getParent());
+    try (InputStream in = getClass().getClassLoader().getResourceAsStream(resource)) {
+      if (in == null) throw new IllegalStateException("Missing bundled resource: " + resource);
+      Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
     }
   }
 }
