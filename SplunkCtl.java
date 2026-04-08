@@ -29,7 +29,7 @@ import picocli.CommandLine.PropertiesDefaultProvider;
     version = "splunkctl 0.1",
     description = "Manages the lifecycle of a local Splunk Docker container.",
     defaultValueProvider = PropertiesDefaultProvider.class,
-    subcommands = {StartCommand.class, StopCommand.class, ResetCommand.class, StatusCommand.class})
+    subcommands = {StartCommand.class, StopCommand.class, DestroyCommand.class, StatusCommand.class})
 public class SplunkCtl implements Callable<Integer> {
 
   @Option(
@@ -105,8 +105,8 @@ class StopCommand implements Callable<Integer> {
   }
 }
 
-@Command(name = "reset", description = "Full teardown including volumes (fresh slate).")
-class ResetCommand implements Callable<Integer> {
+@Command(name = "destroy", description = "Tear down containers and remove all volumes.")
+class DestroyCommand implements Callable<Integer> {
 
   @ParentCommand private SplunkCtl parent;
 
