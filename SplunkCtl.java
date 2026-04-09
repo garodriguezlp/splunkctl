@@ -20,11 +20,11 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.stream.Stream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.concurrent.Callable;
+import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
 import org.apache.commons.exec.DefaultExecutor;
 import org.apache.commons.exec.PumpStreamHandler;
@@ -47,7 +47,7 @@ import picocli.CommandLine.PropertiesDefaultProvider;
       StopCommand.class,
       DestroyCommand.class,
       StatusCommand.class,
-    ExtractCommand.class,
+      ExtractCommand.class,
       GenerateCompletion.class
     })
 public class SplunkCtl implements Callable<Integer> {
@@ -242,7 +242,10 @@ class StatusCommand implements Callable<Integer> {
   }
 }
 
-@Command(name = "extract", mixinStandardHelpOptions = true, description = "Decompress a .gzip log file into the Splunk watched folder.")
+@Command(
+    name = "extract",
+    mixinStandardHelpOptions = true,
+    description = "Decompress a .gzip log file into the Splunk watched folder.")
 class ExtractCommand implements Callable<Integer> {
 
   @ParentCommand private SplunkCtl parent;
@@ -254,7 +257,7 @@ class ExtractCommand implements Callable<Integer> {
       names = "--log-path",
       description =
           "Directory where the extracted log file will be written. Created if absent."
-          + " Env: SPLUNK_LOG_PATH. Default: ~/.splunkctl/samples")
+              + " Env: SPLUNK_LOG_PATH. Default: ~/.splunkctl/samples")
   private Path logPath;
 
   @Override
@@ -506,7 +509,8 @@ final class GzipExtractor {
 
   Path extract(Path gzipFile, Path outputDir) throws IOException {
     Path outputFile = outputDir.resolve(outputFileName());
-    try (InputStream in = new GZIPInputStream(new BufferedInputStream(Files.newInputStream(gzipFile)));
+    try (InputStream in =
+            new GZIPInputStream(new BufferedInputStream(Files.newInputStream(gzipFile)));
         OutputStream out = Files.newOutputStream(outputFile)) {
       in.transferTo(out);
     }
@@ -514,6 +518,8 @@ final class GzipExtractor {
   }
 
   private String outputFileName() {
-    return OUTPUT_FILE_PREFIX + LocalDateTime.now().format(TIMESTAMP_FORMATTER) + OUTPUT_FILE_SUFFIX;
+    return OUTPUT_FILE_PREFIX
+        + LocalDateTime.now().format(TIMESTAMP_FORMATTER)
+        + OUTPUT_FILE_SUFFIX;
   }
 }
