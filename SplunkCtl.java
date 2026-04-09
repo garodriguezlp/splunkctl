@@ -11,22 +11,27 @@
 //FILES docker-compose.yml=support/compose-working-dir/docker-compose.yml
 //FILES default.yml=support/compose-working-dir/default.yml
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.stream.Stream;
 import java.util.HashMap;
 import java.util.Scanner;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.zip.GZIPInputStream;
 import org.apache.commons.exec.DefaultExecutor;
 import org.apache.commons.exec.PumpStreamHandler;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
 import picocli.CommandLine.ParentCommand;
 import picocli.CommandLine.PropertiesDefaultProvider;
 
@@ -36,7 +41,7 @@ import picocli.CommandLine.PropertiesDefaultProvider;
     version = "splunkctl 0.1",
     description = "Manages the lifecycle of a local Splunk Docker container.",
     defaultValueProvider = PropertiesDefaultProvider.class,
-    subcommands = {StartCommand.class, StopCommand.class, DestroyCommand.class, StatusCommand.class})
+    subcommands = {StartCommand.class, StopCommand.class, DestroyCommand.class, StatusCommand.class, ExtractCommand.class})
 public class SplunkCtl implements Callable<Integer> {
 
   @Option(
@@ -213,6 +218,32 @@ class StatusCommand implements Callable<Integer> {
     parent.printComposeWorkingDirectory();
     new ContainerInspector().printActualConfig();
     return new DockerComposeRunner(composePath).ps(config);
+  }
+}
+
+@Command(name = "extract", mixinStandardHelpOptions = true, description = "Decompress a Cloud Foundry .gzip log file into the Splunk watched folder.")
+class ExtractCommand implements Callable<Integer> {
+
+  @ParentCommand private SplunkCtl parent;
+
+  @Parameters(index = "0", description = "Path to the .gzip file to extract.")
+  private Path gzipFile;
+
+  @Option(
+      names = "--log-path",
+      description =
+          "Directory where the extracted log file will be written. Created if absent."
+          + " Env: SPLUNK_LOG_PATH. Default: ~/.splunkctl/samples")
+  private Path logPath;
+
+  @Override
+  public Integer call() throws IOException {
+    SplunkConfig config = parent.config(logPath);
+    Path outputDir = config.logPath();
+    Files.createDirectories(outputDir);
+    Path outputFile = new GzipExtractor().extract(gzipFile, outputDir);
+    System.out.println("Extracted: " + outputFile.toAbsolutePath());
+    return 0;
   }
 }
 
@@ -444,5 +475,26 @@ final class InfrastructureExtractor {
       if (in == null) throw new IllegalStateException("Missing bundled resource: " + resource);
       Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
     }
+  }
+}
+
+final class GzipExtractor {
+
+  private static final String OUTPUT_FILE_PREFIX = "extracted-";
+  private static final String OUTPUT_FILE_SUFFIX = ".log";
+  private static final DateTimeFormatter TIMESTAMP_FORMATTER =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
+
+  Path extract(Path gzipFile, Path outputDir) throws IOException {
+    Path outputFile = outputDir.resolve(outputFileName());
+    try (InputStream in = new GZIPInputStream(new BufferedInputStream(Files.newInputStream(gzipFile)));
+        OutputStream out = Files.newOutputStream(outputFile)) {
+      in.transferTo(out);
+    }
+    return outputFile;
+  }
+
+  private String outputFileName() {
+    return OUTPUT_FILE_PREFIX + LocalDateTime.now().format(TIMESTAMP_FORMATTER) + OUTPUT_FILE_SUFFIX;
   }
 }
