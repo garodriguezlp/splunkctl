@@ -5,39 +5,39 @@
 # under /opt/splunk/etc/system/local/ at startup.
 #
 # ─────────────────────────────────────────────────────────────────────────────
-# Event flow for PCF logs
+# Event flow for prefixed app logs
 # ─────────────────────────────────────────────────────────────────────────────
 #
-#  Raw CF line (from file monitor):
+#  Raw prefixed line (from file monitor):
 #    <ts> [<component>/<instance>] OUT {"app":"x","level":"info",...}
 #
-#  inputs.conf  ──► assigns index=main, sourcetype=pcf_cf_raw
-#                   (every incoming line starts life as pcf_cf_raw)
+#  inputs.conf  ──► assigns index=main, sourcetype=prefixed_raw
+#                   (every incoming line starts life as prefixed_raw)
 #
-#  props.conf [pcf_cf_raw]
+#  props.conf [prefixed_raw]
 #    │
-#    ├─► SEDCMD-strip_cf_envelope  ──► rewrites _raw in-place
-#    │     s/^[^{]*{/{/            ──► strips the CF envelope so that JSON
-#    │                                 lines become pure JSON, e.g.:
-#    │                                   "<ts> [app/0] OUT {…}" → "{…}"
-#    │                                 non-JSON lines (RTR, etc.) are unchanged
-#    │                                 (no '{' in them → sed no-op).
-#    │                                 NOTE: SEDCMD runs BEFORE TRANSFORMS, so
-#    │                                 ALL events — including those later
-#    │                                 re-routed to pcf_app — see stripped _raw.
+#    ├─► SEDCMD-strip_log_prefix  ──► rewrites _raw in-place
+#    │     s/^[^{]*{/{/           ──► strips the log prefix so that JSON
+#    │                                lines become pure JSON, e.g.:
+#    │                                  "<ts> [app/0] OUT {…}" → "{…}"
+#    │                                non-JSON lines (RTR, etc.) are unchanged
+#    │                                (no '{' in them → sed no-op).
+#    │                                NOTE: SEDCMD runs BEFORE TRANSFORMS, so
+#    │                                ALL events — including those later
+#    │                                re-routed to app_json — see stripped _raw.
 #    │
-#    └─► TRANSFORMS-route = pcf_route_json
+#    └─► TRANSFORMS-route = route_json
 #          │
-#          ├─ _raw starts with '{'? ──► YES ──► MetaData:Sourcetype = pcf_app
+#          ├─ _raw starts with '{'? ──► YES ──► MetaData:Sourcetype = app_json
 #          │                                         │
-#          │                                    props.conf [pcf_app]
+#          │                                    props.conf [app_json]
 #          │                                      KV_MODE=json
 #          │                                      (_raw is already pure JSON,
 #          │                                       all fields extracted)
 #          │
-#          └─ _raw does NOT start with '{'? ──► stays as pcf_cf_raw
+#          └─ _raw does NOT start with '{'? ──► stays as prefixed_raw
 #                                                   │
-#                                              props.conf [pcf_cf_raw]
+#                                              props.conf [prefixed_raw]
 #                                                KV_MODE=auto
 #                                                (best-effort key=value
 #                                                 extraction, e.g. RTR lines)
@@ -56,27 +56,27 @@ splunk:
         content:
           monitor:///var/log/springapp:
             index: main
-            sourcetype: pcf_cf_raw
+            sourcetype: prefixed_raw
             followTail: "0"
 
     - key: transforms
       value:
         directory: /opt/splunk/etc/system/local
         content:
-          pcf_route_json:
+          route_json:
             REGEX: '^\{'
             # MetaData:Sourcetype is Splunk's internal token notation for the
             # sourcetype metadata field. Writing to it re-labels the event's
             # sourcetype at index time without changing the raw data.
             DEST_KEY: MetaData:Sourcetype
-            # field::value assignment syntax: sets the sourcetype field to pcf_app.
-            FORMAT: sourcetype::pcf_app
+            # field::value assignment syntax: sets the sourcetype field to app_json.
+            FORMAT: sourcetype::app_json
 
     - key: props
       value:
         directory: /opt/splunk/etc/system/local
         content:
-          pcf_cf_raw:
+          prefixed_raw:
             SHOULD_LINEMERGE: "false"
             TRUNCATE: "0"
             NO_BINARY_CHECK: "true"
@@ -84,13 +84,13 @@ splunk:
             # Strip everything before the first '{' so JSON lines become pure
             # JSON. Safe for non-JSON (RTR) lines: sed is a no-op when there
             # is no '{'. Crucially, SEDCMD runs BEFORE TRANSFORMS-route, so
-            # events re-routed to pcf_app by the transform already have the CF
-            # envelope removed — that is why pcf_app can safely use KV_MODE=json.
-            SEDCMD-strip_cf_envelope: "s/^[^{]*{/{/"
-            TRANSFORMS-route: pcf_route_json
+            # events re-routed to app_json by the transform already have the log
+            # prefix removed — that is why app_json can safely use KV_MODE=json.
+            SEDCMD-strip_log_prefix: "s/^[^{]*{/{/"
+            TRANSFORMS-route: route_json
             KV_MODE: auto
-          pcf_app:
+          app_json:
             SHOULD_LINEMERGE: "false"
             # _raw is already pure JSON by the time this stanza applies (stripped by
-            # pcf_cf_raw SEDCMD above). KV_MODE=json extracts all fields from the object.
+            # prefixed_raw SEDCMD above). KV_MODE=json extracts all fields from the object.
             KV_MODE: json

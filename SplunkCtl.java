@@ -221,7 +221,7 @@ class StatusCommand implements Callable<Integer> {
   }
 }
 
-@Command(name = "extract", mixinStandardHelpOptions = true, description = "Decompress a Cloud Foundry .gzip log file into the Splunk watched folder.")
+@Command(name = "extract", mixinStandardHelpOptions = true, description = "Decompress a .gzip log file into the Splunk watched folder.")
 class ExtractCommand implements Callable<Integer> {
 
   @ParentCommand private SplunkCtl parent;
