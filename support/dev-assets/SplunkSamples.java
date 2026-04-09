@@ -8,6 +8,8 @@
 //DEPS info.picocli:picocli:4.7.6
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -18,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.zip.GZIPOutputStream;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -49,6 +52,11 @@ public class SplunkSamples implements Callable<Integer> {
           "Timestamp for the first sample event, in ISO-8601 format. Defaults to about 10 seconds before now.")
   private Instant baseTime;
 
+  @Option(
+      names = "--gzip",
+      description = "Also write a gzip-compressed copy of the prefixed sample log as sample.gzip.")
+  private boolean gzip;
+
   public static void main(String[] args) {
     int exitCode = new CommandLine(new SplunkSamples()).execute(args);
     System.exit(exitCode);
@@ -63,20 +71,33 @@ public class SplunkSamples implements Callable<Integer> {
       (baseTime != null ? baseTime : Instant.now()).truncatedTo(ChronoUnit.MILLIS)
         .minusSeconds(appEvents.size() + rtrEvents.size() - 1L);
 
+    String prefixedContent = buildPrefixedLines(appEvents, rtrEvents, firstEventTime);
+
     Files.createDirectories(effectiveOutputDir);
     Files.writeString(
         effectiveOutputDir.resolve(JSON_FILE_NAME), buildJsonLines(appEvents, firstEventTime));
-    Files.writeString(
-        effectiveOutputDir.resolve(PREFIXED_FILE_NAME),
-        buildPrefixedLines(appEvents, rtrEvents, firstEventTime));
+    Files.writeString(effectiveOutputDir.resolve(PREFIXED_FILE_NAME), prefixedContent);
 
     System.out.println("Generated fresh samples:");
     System.out.println("  " + effectiveOutputDir.resolve(JSON_FILE_NAME).toAbsolutePath());
     System.out.println("  " + effectiveOutputDir.resolve(PREFIXED_FILE_NAME).toAbsolutePath());
+
+    if (gzip) {
+      Path gzipPath = effectiveOutputDir.resolve("sample.gzip");
+      writeGzip(gzipPath, prefixedContent);
+      System.out.println("  " + gzipPath.toAbsolutePath());
+    }
+
     System.out.println();
     System.out.println("Next step:");
     System.out.println("  ./jbang splunkctl start --log-path " + effectiveOutputDir.toAbsolutePath());
     return 0;
+  }
+
+  private void writeGzip(Path gzipPath, String content) throws IOException {
+    try (OutputStream out = new GZIPOutputStream(Files.newOutputStream(gzipPath))) {
+      out.write(content.getBytes(StandardCharsets.UTF_8));
+    }
   }
 
   private String buildJsonLines(List<SampleEvent> events, Instant firstEventTime) {
