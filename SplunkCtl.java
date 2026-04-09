@@ -22,12 +22,13 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.stream.Stream;
 import java.util.HashMap;
-import java.util.Scanner;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.concurrent.Callable;
 import java.util.zip.GZIPInputStream;
 import org.apache.commons.exec.DefaultExecutor;
 import org.apache.commons.exec.PumpStreamHandler;
+import picocli.AutoComplete.GenerateCompletion;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -41,7 +42,14 @@ import picocli.CommandLine.PropertiesDefaultProvider;
     version = "splunkctl 0.1",
     description = "Manages the lifecycle of a local Splunk Docker container.",
     defaultValueProvider = PropertiesDefaultProvider.class,
-    subcommands = {StartCommand.class, StopCommand.class, DestroyCommand.class, StatusCommand.class, ExtractCommand.class})
+    subcommands = {
+      StartCommand.class,
+      StopCommand.class,
+      DestroyCommand.class,
+      StatusCommand.class,
+    ExtractCommand.class,
+      GenerateCompletion.class
+    })
 public class SplunkCtl implements Callable<Integer> {
 
   @Option(
@@ -126,7 +134,8 @@ public class SplunkCtl implements Callable<Integer> {
 
   void printComposeWorkingDirectory() {
     System.out.println(
-        "Compose working directory: " + InfrastructureExtractor.COMPOSE_WORKING_DIR.toAbsolutePath());
+        "Compose working directory: "
+            + InfrastructureExtractor.COMPOSE_WORKING_DIR.toAbsolutePath());
   }
 }
 
@@ -137,7 +146,10 @@ enum ComposeWorkingDirectoryMode {
 
 // --- Commands ---
 
-@Command(name = "start", mixinStandardHelpOptions = true, description = "Start the Splunk container in detached mode.")
+@Command(
+    name = "start",
+    mixinStandardHelpOptions = true,
+    description = "Start the Splunk container in detached mode.")
 class StartCommand implements Callable<Integer> {
 
   @ParentCommand private SplunkCtl parent;
@@ -146,7 +158,7 @@ class StartCommand implements Callable<Integer> {
       names = "--log-path",
       description =
           "Host directory mounted into the container as /var/log/springapp. Created if absent. Env:"
-          + " SPLUNK_LOG_PATH. Default: ~/.splunkctl/samples")
+              + " SPLUNK_LOG_PATH. Default: ~/.splunkctl/samples")
   private Path logPath;
 
   @Override
@@ -169,7 +181,10 @@ class StartCommand implements Callable<Integer> {
   }
 }
 
-@Command(name = "stop", mixinStandardHelpOptions = true, description = "Stop and remove containers, preserving volumes.")
+@Command(
+    name = "stop",
+    mixinStandardHelpOptions = true,
+    description = "Stop and remove containers, preserving volumes.")
 class StopCommand implements Callable<Integer> {
 
   @ParentCommand private SplunkCtl parent;
@@ -186,7 +201,10 @@ class StopCommand implements Callable<Integer> {
   }
 }
 
-@Command(name = "destroy", mixinStandardHelpOptions = true, description = "Tear down containers and remove all volumes.")
+@Command(
+    name = "destroy",
+    mixinStandardHelpOptions = true,
+    description = "Tear down containers and remove all volumes.")
 class DestroyCommand implements Callable<Integer> {
 
   @ParentCommand private SplunkCtl parent;
@@ -203,7 +221,10 @@ class DestroyCommand implements Callable<Integer> {
   }
 }
 
-@Command(name = "status", mixinStandardHelpOptions = true, description = "Show current state of the managed containers.")
+@Command(
+    name = "status",
+    mixinStandardHelpOptions = true,
+    description = "Show current state of the managed containers.")
 class StatusCommand implements Callable<Integer> {
 
   @ParentCommand private SplunkCtl parent;
@@ -377,15 +398,13 @@ final class ContainerInspector {
 
   private int runInspect() {
     try {
-      org.apache.commons.exec.CommandLine cmd =
-          new org.apache.commons.exec.CommandLine("docker");
+      org.apache.commons.exec.CommandLine cmd = new org.apache.commons.exec.CommandLine("docker");
       cmd.addArgument("inspect");
       cmd.addArgument("--format");
       cmd.addArgument(INSPECT_FORMAT, false);
       cmd.addArgument(CONTAINER_NAME);
       DefaultExecutor executor = new DefaultExecutor();
-      executor.setStreamHandler(
-          new PumpStreamHandler(System.out, OutputStream.nullOutputStream()));
+      executor.setStreamHandler(new PumpStreamHandler(System.out, OutputStream.nullOutputStream()));
       executor.setExitValues(null);
       return executor.execute(cmd);
     } catch (Exception e) {
