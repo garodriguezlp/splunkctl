@@ -12,6 +12,7 @@
 //FILES default.yml=support/compose-working-dir/default.yml
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -125,8 +126,8 @@ public class SplunkCtl implements Callable<Integer> {
       System.out.print("Continue? [N/y]: ");
       String answer = new Scanner(System.in).nextLine().trim();
       if (!answer.equalsIgnoreCase("y")) {
-        System.out.println("Keeping existing context.");
-        return extractor.composePath();
+        System.out.println("Start aborted.");
+        return null;
       }
     }
     return extractor.extract();
@@ -167,15 +168,20 @@ class StartCommand implements Callable<Integer> {
     if (!new PreconditionChecker().check()) return 1;
     Path composePath =
         parent.prepareComposeWorkingDirectory(ComposeWorkingDirectoryMode.PROMPT_BEFORE_OVERWRITE);
+    if (composePath == null) return 0;
     Files.createDirectories(config.logPath());
     parent.printComposeWorkingDirectory();
     new ContainerInspector().printEffectiveConfig(config);
     int exitCode = new DockerComposeRunner(composePath).up(config);
     if (exitCode == 0) {
-      System.out.println(
-          "Splunk started. Web UI: http://localhost:8000 (admin / "
-              + config.splunkPassword()
-              + ")");
+      if (new SplunkReadinessChecker().waitUntilReady()) {
+        System.out.println(
+            "Splunk is ready. Web UI: http://localhost:8000 (admin / "
+                + config.splunkPassword()
+                + ")");
+      } else {
+        exitCode = 1;
+      }
     }
     return exitCode;
   }
@@ -369,6 +375,65 @@ final class DockerComposeRunner {
     env.put("SPLUNK_IMAGE", config.splunkImage());
     env.put("SPLUNK_PASSWORD", config.splunkPassword());
     return env;
+  }
+}
+
+final class SplunkReadinessChecker {
+
+  private static final String CONTAINER_NAME = "splunk";
+  private static final int POLL_INTERVAL_MS = 5_000;
+  private static final int TIMEOUT_MS = 300_000; // 5 minutes
+
+  boolean waitUntilReady() {
+    System.out.print("Waiting for Splunk to be ready");
+    System.out.flush();
+    long start = System.currentTimeMillis();
+    while (System.currentTimeMillis() - start < TIMEOUT_MS) {
+      String status = getHealthStatus();
+      if ("healthy".equals(status)) {
+        System.out.println(" done!");
+        return true;
+      }
+      if ("unhealthy".equals(status)) {
+        System.out.println();
+        System.err.println(
+            "Error: Splunk container is unhealthy. Check logs with: docker logs " + CONTAINER_NAME);
+        return false;
+      }
+      System.out.print(".");
+      System.out.flush();
+      try {
+        Thread.sleep(POLL_INTERVAL_MS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        System.out.println();
+        return false;
+      }
+    }
+    System.out.println();
+    System.err.println(
+        "Error: Timed out waiting for Splunk to become ready. "
+            + "Check logs with: docker logs " + CONTAINER_NAME);
+    return false;
+  }
+
+  private String getHealthStatus() {
+    try {
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      org.apache.commons.exec.CommandLine cmd = new org.apache.commons.exec.CommandLine("docker");
+      cmd.addArgument("inspect");
+      cmd.addArgument("--format");
+      cmd.addArgument("{{.State.Health.Status}}", false);
+      cmd.addArgument(CONTAINER_NAME);
+      DefaultExecutor executor = new DefaultExecutor();
+      executor.setStreamHandler(new PumpStreamHandler(out, OutputStream.nullOutputStream()));
+      executor.setExitValues(null);
+      int exitCode = executor.execute(cmd);
+      if (exitCode != 0) return "unknown";
+      return out.toString(java.nio.charset.StandardCharsets.UTF_8).trim();
+    } catch (Exception e) {
+      return "unknown";
+    }
   }
 }
 
